@@ -17,7 +17,7 @@ class Uart:
         self.ser = None
         self.isLog = False
         self.tlock = threading.Lock()
-        self.myqueue = collections.deque(maxlen=10000 * self.odr)
+        self.myqueue = collections.deque(maxlen=1000 * self.odr)
         self.pkt_info_dict = {
             'S1': ([0x53, 0x31], 31),
             'S2': ([0x53, 0x32], 45),
@@ -118,7 +118,7 @@ class Uart:
         parser: parse function of data
         '''
         timeout = 1 / self.odr
-        idx = 20 if self.odr > 50 else 2 if self.odr == 50 else 1
+        idx = 20 if self.odr > 50 else 25 if self.odr == 50 else self.odr
         cnt = 0
         x, y, z = 4, 5, -2 # Aceinna packet protocol: x(num of packet type bytes) y(num of packet type bytes + num of payload length bytes) z(negative num of crc bytes) 
         packet_type_payload = [0x55, 0x55] + self.pkt_info_dict[data_type][0]
