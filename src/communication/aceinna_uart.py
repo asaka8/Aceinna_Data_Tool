@@ -117,7 +117,6 @@ class Uart:
         data_type: The type of the data to be visualized
         parser: parse function of data
         '''
-        timeout = 1 / self.odr
         idx = 20 if self.odr > 50 else 25 if self.odr == 50 else self.odr
         cnt = 0
         x, y, z = 4, 5, -2 # Aceinna packet protocol: x(num of packet type bytes) y(num of packet type bytes + num of payload length bytes) z(negative num of crc bytes) 
@@ -144,7 +143,7 @@ class Uart:
 
         rev_thread = threading.Thread(target=self.rev_data_to_buffer, args=(data_length,))
         rev_thread.start() 
-        time.sleep(1)
+        time.sleep(0.1)
         while self.isLog:
             if len(self.myqueue) != 0:
                 data = self.myqueue.popleft()
@@ -153,7 +152,6 @@ class Uart:
                     if cnt == self.odr / idx:
                         payload = data[y:z]
                         latest = parser(payload)
-                        time.sleep(timeout)
                         mylatest = [latest[i] for i in target_data_pos]
                         cnt = 0
                         yield mylatest
