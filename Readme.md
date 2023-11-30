@@ -24,6 +24,7 @@ curses: $pip install -i https://pypi.tuna.tsinghua.edu.cn/simple windows-curses
 以下是使用时需要注意的一些事项：
 1. 在开始使用该工具前需要配置使用参数，如串口号，波特率等，配置方法为：
 'Data Log'->'User Setting'/'Data Play'->'Data Setting'打开配置文件
+
 ![Alt text](pic/Setting.png)
 
 （配置文件中的'maxt'是可显示数据的最大时间长度，'dt'是数据刷新的频率）
