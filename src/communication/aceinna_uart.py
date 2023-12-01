@@ -132,6 +132,8 @@ class Uart:
             packet_type_payload = self.pkt_info_dict[data_type][0]
         elif data_type == 'A1':
             target_data_pos = [6, 7, 8, 3, 4, 5]
+        elif data_type == 'A2':
+            target_data_pos = [6, 7, 8, 3, 4, 5]
         elif data_type == 'FM':
             '''This packet is not supported to visualize
             '''

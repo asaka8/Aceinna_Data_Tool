@@ -16,7 +16,9 @@ class IMUFunc:
             'S1': ([0x55, 0x55, 0x53, 0x31], 31),
             'S2': ([0x55, 0x55, 0x53, 0x32], 45),
             'A1': ([0x55, 0x55, 0x41, 0X31], 39),
+            'A2': ([0x55, 0x55, 0x41, 0x32], 37),
             'FM': ([0x55, 0x55, 0x46, 0x4D], 123),
+            'a2': ([0x55, 0x55, 0x61, 0x32], 55),
             'S3': ([0x55, 0xAA, 0x24], 40),
             'AT': ([0xBD, 0XDB, 0x54], 39)
         }
@@ -48,6 +50,10 @@ class IMUFunc:
                 yield progress
         elif data_type == 'A1':
             head_line = ['rollAngle', 'pitchAngle', 'yawAngleMag', 'xRateCorrected', 'yRateCorrected', 'zRateCorrected', 'xAccel', 'yAccel', 'zAccel', 'xRateTemp', 'timeITOW', 'BITstatus']
+            for progress in self.parse_to_csvf(data_path, data_type, head_line):
+                yield progress
+        elif data_type == 'A2':
+            head_line = ['rollAngle', 'pitchAngle', 'yawAngleTrue', 'xRateCorrected', 'yRateCorrected', 'zRateCorrected', 'xAccel', 'yAccel', 'zAccel', 'xRateTemp', 'yRateTemp', 'zRateTemp', 'timeITOW', 'BITstatus']
             for progress in self.parse_to_csvf(data_path, data_type, head_line):
                 yield progress
         elif data_type == 'FM':
@@ -252,7 +258,7 @@ class IMUFunc:
         return num,  xRate, yRate, zRate, xAccel, yAccel, zAccel,boardTempCounts, supplierid, productid
 
     def A1_parse(self, payload):
-        fmt = '<hhhhhhhhhhhhhIH'
+        fmt = '>hhhhhhhhhhhhhIH'
         parse_data = struct.unpack(fmt, payload)
 
         rollAngle = parse_data[0] * (360 / 2**16)
@@ -272,6 +278,25 @@ class IMUFunc:
         BITstatus = parse_data[14]
 
         return rollAngle, pitchAngle, yawAngle, xRateCorrected, yRateCorrected, zRateCorrected, xAccel, yAccel, zAccel, xMag, yMag, zMag, xRateTemp, timeITOW, BITstatus
+
+    def A2_parse(self, payload):
+        fmt = '>hhhhhhhhhhhhIi'
+        parse_data = struct.unpack(fmt, payload)
+        rollAngle = parse_data[0] * (360 / 2**16)
+        pitchAngle = parse_data[1] * (360 / 2**16)
+        yawAngle = parse_data[2] * (360 / 2**16)
+        xRateCorrected = parse_data[3] * (1260 / 2**16)
+        yRateCorrected = parse_data[4] * (1260 / 2**16)
+        zRateCorrected = parse_data[5] * (1260 / 2**16)
+        xAccel = parse_data[6] * (20 / 2**16)
+        yAccel = parse_data[7] * (20 / 2**16)
+        zAccel = parse_data[8] * (20 / 2**16)
+        xRateTemp = parse_data[9] * (200 / 2**16)
+        yRateTemp = parse_data[10] * (200 / 2**16)
+        zRateTemp = parse_data[11] * (200 / 2**16)
+        timeITOW = parse_data[12]
+        BITstatus = parse_data[13]
+        return rollAngle, pitchAngle, yawAngle, xRateCorrected, yRateCorrected, zRateCorrected, xAccel, yAccel, zAccel, xRateTemp, yRateTemp, zRateTemp, timeITOW, BITstatus
 
     def FM_parse(self, payload):
         fmt = '<' + 'i'*28 + 'H'*2
