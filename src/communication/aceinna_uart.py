@@ -22,7 +22,8 @@ class Uart:
             'S1': ([0x53, 0x31], 31),
             'S2': ([0x53, 0x32], 45),
             'F1': ([0x46, 0x31], 61),
-            'A1': ([0x43, 0x31], 39),
+            'A1': ([0x41, 0x31], 39),
+            'A2': ([0x41, 0x32], 37),
             'FM': ([0x46, 0x4D], 123),
             'S3': ([0x55, 0xAA, 0x24], 40),
             'AT': ([0xBD, 0XDB, 0x54], 39)
@@ -35,7 +36,7 @@ class Uart:
                                     parity=serial.PARITY_NONE,
                                     stopbits=serial.STOPBITS_ONE, 
                                     bytesize=serial.EIGHTBITS,
-                                    timeout=1)
+                                    timeout=0.1)
             self.ser.set_buffer_size(rx_size=2048, tx_size=2048)
         except serial.SerialException as e:
             error_print("Error occurred while trying to create serial port")
@@ -53,8 +54,6 @@ class Uart:
     def ser_close(self):
         if self.ser is not None:
             if self.ser.isOpen():
-                self.ser.flushInput()
-                self.ser.flushOutput()
                 self.ser.close()
                 pass_print("Serial port is closed.")
 
@@ -64,6 +63,8 @@ class Uart:
         '''
         buffer = bytearray()
         self.isLog = True
+        self.ser.flushInput()
+        self.ser.flushOutput()
         while self.isLog:
             if self.ser.in_waiting >= data_length:
                 data = self.ser.read(data_length)
@@ -74,6 +75,7 @@ class Uart:
                     self.myqueue.append(bytes(packet))
                     self.tlock.release()
                     buffer = buffer[data_length:]
+        self.myqueue.clear()
 
     def log_data_to_file(self, logf_name):
         while self.isLog == False:
@@ -112,7 +114,7 @@ class Uart:
     '''TODO: def write_read_response(self, msg):
     '''
    
-    def realtime_data(self, data_type, parser):
+    def realtime_data(self, stdscr, data_type, parser):
         '''
         data_type: The type of the data to be visualized
         parser: parse function of data
@@ -133,7 +135,7 @@ class Uart:
         elif data_type == 'A1':
             target_data_pos = [6, 7, 8, 3, 4, 5]
         elif data_type == 'A2':
-            target_data_pos = [6, 7, 8, 3, 4, 5]
+            target_data_pos = [6, 7, 8, 3, 4, 5, 0, 1]
         elif data_type == 'FM':
             '''This packet is not supported to visualize
             '''
@@ -145,10 +147,12 @@ class Uart:
 
         rev_thread = threading.Thread(target=self.rev_data_to_buffer, args=(data_length,))
         rev_thread.start() 
-        time.sleep(0.1)
+        start_time = time.time()
+        a = []
         while self.isLog:
             if len(self.myqueue) != 0:
                 data = self.myqueue.popleft()
+                a.append(data)
                 if data[:x] == bytes(packet_type_payload):
                     cnt += 1
                     if cnt == self.odr / idx:
@@ -156,4 +160,12 @@ class Uart:
                         latest = parser(payload)
                         mylatest = [latest[i] for i in target_data_pos]
                         cnt = 0
+                        start_time = time.time()
+                        # if data_type != 'A2':
+                        #     stdscr.addstr(2, 0, f"xAccel:{mylatest[0]} yAccel:{mylatest[1]} zAccel:{mylatest[2]} xGyro:{mylatest[3]} yGyro:{mylatest[4]} zGyro:{mylatest[5]}")
+                        # else:
+                        #     stdscr.addstr(2, 0, f"xAccel:{mylatest[0]} yAccel:{mylatest[1]} zAccel:{mylatest[2]} xGyro:{mylatest[3]} yGyro:{mylatest[4]} zGyro:{mylatest[5]} roll:{mylatest[6]} pitch:{mylatest[7]}")
                         yield mylatest
+                if time.time() - start_time > 3:
+                    self.isLog = False
+                    stdscr.addstr(2, 0, "Data visualization inital failed, Check your User Setting and try again")
