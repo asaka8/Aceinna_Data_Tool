@@ -1,5 +1,6 @@
 import os
 import csv
+import time
 import struct
 import serial
 
@@ -78,9 +79,10 @@ class IMUFunc:
         self.uut.ser_init()
         parser = eval(f'self.{data_type}_parse')
         emitter = self.uut.realtime_data
-        vis = Visual(stdscr, maxt, dt, emitter)
-        vis.start(data_type, parser)
+        vis = Visual(stdscr, data_type, maxt, dt, emitter)
+        vis.start(parser)
         self.uut.isLog = False
+        time.sleep(0.1)
         self.uut.ser_close()
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -280,7 +282,7 @@ class IMUFunc:
         return rollAngle, pitchAngle, yawAngle, xRateCorrected, yRateCorrected, zRateCorrected, xAccel, yAccel, zAccel, xMag, yMag, zMag, xRateTemp, timeITOW, BITstatus
 
     def A2_parse(self, payload):
-        fmt = '>hhhhhhhhhhhhIi'
+        fmt = '>hhhhhhhhhhhhIH'
         parse_data = struct.unpack(fmt, payload)
         rollAngle = parse_data[0] * (360 / 2**16)
         pitchAngle = parse_data[1] * (360 / 2**16)
