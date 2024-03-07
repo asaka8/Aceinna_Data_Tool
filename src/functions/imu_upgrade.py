@@ -14,13 +14,23 @@ UNLOCKBOOT = [0x55, 0x42]
 
 UNLOCKPAYLOAD = [0x92, 0x33, 0x62, 0x19, 0x64, 0x27, 0x42, 0x85]
 
+BOOT_BUAD_DICT = {
+    'IMU330BA': 57600,
+    'IMU330ZA': 115200,
+    'MTLT335D': 57600,
+    'OpenIMU335RI': 115200,
+}
+
 class IMU330BA:
     ############## Private Methods ###############
-    def __init__(self, com, baud, odr, fpath):
+    def __init__(self, com, baud, odr, fpath, device_type):
         self.uart = Uart(com, baud, odr)
+        self.baud = baud
         self.UUT = None
         self.filename = fpath
         self.boot = 0
+        self.device_type = device_type
+        self.boot_buad = BOOT_BUAD_DICT[device_type]
 
     def calc_crc(self, payload):
         '''Calculates CRC per 380 manual
@@ -184,7 +194,7 @@ class IMU330BA:
             :returns:
                 True if bootloader mode entered, False if failed
         '''
-        self.UUT.baudrate = 230400
+        self.UUT.baudrate = self.baud
         self.set_quiet()
         time.sleep(2)
         C = [0x55, 0x55, ord('J'), ord('I'), 0x00]
@@ -197,6 +207,11 @@ class IMU330BA:
         self.UUT.write(C)
         time.sleep(2)  # must wait for boot loader to be ready
         R = self.UUT.read(5)
+        if len(R) == 0:
+            self.UUT.baudrate = self.boot_buad
+            self.UUT.write(C)
+            time.sleep(2)
+            R = self.UUT.read(5)
         if R[0] == 85 and R[1] == 85:
             self.packet_type = '{0:1c}'.format(R[2]) + '{0:1c}'.format(R[3])
             if self.packet_type == 'JI':
@@ -279,7 +294,7 @@ class IMU330BA:
         C.insert(len(C), crc_msb)
         C.insert(len(C), crc_lsb)
         status = 0
-        self.UUT.baudrate = 57600
+        self.UUT.baudrate = self.boot_buad
         while status == 0:
             self.UUT.write(C)
             if addr == 0:

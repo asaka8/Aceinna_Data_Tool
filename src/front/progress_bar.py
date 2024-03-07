@@ -8,6 +8,7 @@ def progress_bar(step, length):
         @wraps(func)
         def wrapper(*args, **kwargs):
             stdscr = args[0].stdscr
+            stdscr.nodelay(False)
             def update_progress(progress):
                 progress_win.clear()
                 # progress_win.border()
@@ -36,7 +37,7 @@ def progress_bar(step, length):
                     update_progress(length)
 
             stdscr.getch()
-            curses.endwin()
+            # curses.endwin()
 
         return wrapper
     return decorator

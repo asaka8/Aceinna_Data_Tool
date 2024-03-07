@@ -6,6 +6,13 @@ my_dirs = []
 def delete_pycache_folders(directory):
     for root, dirs, files in os.walk(directory):
         for dir in dirs:
+            if dir == "setting" or dir == "bin" or dir == "data":
+                folder_path = os.path.join(root, dir)
+                shutil.rmtree(folder_path)
+                print(f"Deleted folder: {folder_path}")
+
+    for root, dirs, files in os.walk(".\\src"):
+        for dir in dirs:
             my_dirs.append(f"{root}\\{dir}")
 
     for mdir in my_dirs:
@@ -17,4 +24,4 @@ def delete_pycache_folders(directory):
                     print(f"Deleted folder: {folder_path}")
             
 
-delete_pycache_folders(".\\src")
+delete_pycache_folders(".")

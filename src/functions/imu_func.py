@@ -6,6 +6,7 @@ import serial
 
 from ..communication.aceinna_uart import Uart
 from ..front.data_visual import Visual
+from ..front.setting_table import SettingTable
 
 class IMUFunc:
     def __init__(self, com=None, baud=None, odr=None):
@@ -18,11 +19,40 @@ class IMUFunc:
             'S2': ([0x55, 0x55, 0x53, 0x32], 45),
             'A1': ([0x55, 0x55, 0x41, 0X31], 39),
             'A2': ([0x55, 0x55, 0x41, 0x32], 37),
-            'FM': ([0x55, 0x55, 0x46, 0x4D], 123),
+            'FM': ([0x55, 0x55, 0x46, 0x4D], 95),
             'a2': ([0x55, 0x55, 0x61, 0x32], 55),
             'S3': ([0x55, 0xAA, 0x24], 40),
             'AT': ([0xBD, 0XDB, 0x54], 39)
         }
+
+        self.user_command = {
+            'GP': [0x55, 0x55, 0x47, 0x50],
+            'WF': [0x55, 0x55, 0x57, 0x46],
+            'SF': [0x55, 0x55, 0x53, 0x46],
+            'RF': [0x55, 0x55, 0x52, 0x46],
+            'GF': [0x55, 0x55, 0x47, 0x46],
+        }
+
+    def get_imu_product_info(self):
+        cmd = bytes(self.user_command['GP'])
+        packet_payload = cmd
+        packet_payload += bytes([0x02, 0x49, 0x44]) # length + 'ID'
+        crc = bytes(self.calc_crc(packet_payload[2:]))
+        packet = packet_payload + crc
+        self.uut.ser_init()
+        result = self.uut.write_read_response(packet)
+        self.uut.ser_close()
+        if result[0]:
+            product_info_payload = result[1][5:-2]
+            product_sn = struct.unpack('>I', product_info_payload[:4])[0]
+            info_end_pos = product_info_payload.find(b'\x00')
+            if info_end_pos != -1:
+                product_info = product_info_payload[4:info_end_pos].decode('utf-8')
+            else:
+                product_info = product_info_payload[4:].decode('utf-8')
+            product_info = f'{product_sn} ' + product_info
+            return product_info
+        return None
 
     def imu_data_record(self, data_type, logf_name, stdscr=None):
         try:
@@ -77,13 +107,159 @@ class IMUFunc:
         dt: Update rate of data visualization
         '''
         self.uut.ser_init()
+        self.uut.pkt_info_update(data_type)
         parser = eval(f'self.{data_type}_parse')
         emitter = self.uut.realtime_data
-        vis = Visual(stdscr, data_type, maxt, dt, emitter)
+        if data_type == 'FM':
+            data_length = self.uut.pkt_info_dict[data_type][1]
+            chip_num = int((data_length - 11) / 28)
+            vis = Visual(stdscr, data_type, maxt, dt, emitter, chip_num)
+        else:
+            vis = Visual(stdscr, data_type, maxt, dt, emitter)
         vis.start(parser)
         self.uut.isLog = False
         time.sleep(0.1)
         self.uut.ser_close()
+    
+    def imu_get_field_val(self, id_list):
+        cmd = bytes(self.user_command['GF'])
+        packet_payload = cmd
+        packet = None
+        user_info = {}
+
+        num_fields = len(id_list)
+        payload_length = num_fields * 2 + 1
+        packet_payload += struct.pack('>B', payload_length)
+        packet_payload += struct.pack('>B', num_fields)
+        for id in id_list:
+            packet_payload += struct.pack('>H', int(id))
+        crc = bytes(self.calc_crc(packet_payload[2:]))
+        packet = packet_payload + crc
+        resp_length = num_fields * 4 + 1 + 7
+        self.uut.ser_init()
+        result = self.uut.write_read_response(packet, resp_length) # num + f0 + fv0 + f1 + fv1 ....
+        if result[0] == True:
+            resp_payload = result[1][5:-2]
+            fmt = '>B'
+            for i in range(num_fields):
+                fmt += 'HH'
+            value = struct.unpack(fmt, resp_payload)[1:]
+            for i in range(len(value)):
+                if i % 2 == 0:
+                    user_info[value[i]] = hex(int(value[i+1]))[2:]
+            self.uut.ser_close()
+            return user_info
+        self.uut.ser_close()
+        return None
+
+    def imu_read_field_val(self, id_list):
+        cmd = bytes(self.user_command['RF'])
+        packet_payload = cmd
+        packet = None
+        user_info = {}
+
+        num_fields = len(id_list)
+        payload_length = num_fields * 2 + 1
+        packet_payload += struct.pack('>B', payload_length)
+        packet_payload += struct.pack('>B', num_fields)
+        for id in id_list:
+            packet_payload += struct.pack('>H', int(id))
+        crc = bytes(self.calc_crc(packet_payload[2:]))
+        packet = packet_payload + crc
+        resp_length = num_fields * 4 + 1 + 7
+        self.uut.ser_init()
+        result = self.uut.write_read_response(packet, resp_length) # num + f0 + fv0 + f1 + fv1 ....
+        if result[0] == True:
+            resp_payload = result[1][5:-2]
+            fmt = '>B'
+            for i in range(num_fields):
+                fmt += 'HH'
+            value = struct.unpack(fmt, resp_payload)[1:]
+            for i in range(len(value)):
+                if i % 2 == 0:
+                    user_info[value[i]] = hex(int(value[i+1]))[2:]
+            self.uut.ser_close()
+            return user_info
+        self.uut.ser_close()
+        return None
+        
+    def imu_field_setting_temporary(self, stdscr, id_list, info=None):
+        cmd = bytes(self.user_command['SF'])
+        packet_payload = cmd
+        packet = None
+        table = SettingTable(info)
+        modified_values = table.start(stdscr, id_list)
+        if modified_values != None:
+            num_fields = len(modified_values)
+            payload_length = num_fields * 4 + 1
+            packet_payload += struct.pack('>B', payload_length)
+            packet_payload += struct.pack('>B', num_fields)
+            for id in modified_values:
+                if id != 3:
+                    packet_payload += struct.pack('>H', id)
+                    packet_payload += struct.pack('>H', int(modified_values[id], 16))
+                else:
+                    packet_payload += struct.pack('>H', id)
+                    packet_payload += bytes.fromhex(modified_values[id])
+            crc = bytes(self.calc_crc(packet_payload[2:]))
+            packet = packet_payload + crc
+        if packet is not None:
+            self.uut.ser_init()
+            resp_length = num_fields * 2 + 1 + 7
+            result = self.uut.write_read_response(packet, resp_length)
+            if result[0] == True:
+                stdscr.addstr(2, 0, "Set fields successfully.")
+                self.uut.ser_close()
+                key = stdscr.getch()
+                while key != ord('m') and key != ord('M'):
+                    key = stdscr.getch()
+            elif result[0] == False:
+                stdscr.addstr(2, 0, "Set fields failed.")
+                self.uut.ser_close()
+                key = stdscr.getch()
+                while key != ord('m') and key != ord('M'):
+                    key = stdscr.getch()
+            else:
+                self.uut.ser_close()
+
+    def imu_field_setting_permanent(self, stdscr, id_list, info=None):
+        cmd = bytes(self.user_command['WF'])
+        packet_payload = cmd
+        packet = None
+        table = SettingTable(info)
+        modified_values = table.start(stdscr, id_list)
+        if modified_values != None:
+            num_fields = len(modified_values)
+            payload_length = num_fields * 4 + 1
+            packet_payload += struct.pack('>B', payload_length)
+            packet_payload += struct.pack('>B', num_fields)
+            for id in modified_values:
+                if id != 3:
+                    packet_payload += struct.pack('>H', id)
+                    packet_payload += struct.pack('>H', int(modified_values[id], 16))
+                else:
+                    packet_payload += struct.pack('>H', id)
+                    packet_payload += bytes.fromhex(modified_values[id])
+            crc = bytes(self.calc_crc(packet_payload[2:]))
+            packet = packet_payload + crc
+        if packet is not None:
+            self.uut.ser_init()
+            resp_length = num_fields * 2 + 1 + 7
+            result = self.uut.write_read_response(packet, resp_length)
+            if result[0] == True:
+                stdscr.addstr(2, 0, "Write fields successfully, please reboot device.")
+                self.uut.ser_close()
+                key = stdscr.getch()
+                while key != ord('m') and key != ord('M'):
+                    key = stdscr.getch()
+            elif result[0] == False:
+                stdscr.addstr(2, 0, "Write fields failed.")
+                self.uut.ser_close()
+                key = stdscr.getch()
+                while key != ord('m') and key != ord('M'):
+                    key = stdscr.getch()
+            else:
+                self.uut.ser_close()
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # subfunctions
@@ -300,8 +476,11 @@ class IMUFunc:
         BITstatus = parse_data[13]
         return rollAngle, pitchAngle, yawAngle, xRateCorrected, yRateCorrected, zRateCorrected, xAccel, yAccel, zAccel, xRateTemp, yRateTemp, zRateTemp, timeITOW, BITstatus
 
-    def FM_parse(self, payload):
-        fmt = '<' + 'i'*28 + 'H'*2
+    def FM_parse(self, payload, chip_num):
+        if len(payload) > (chip_num * 28) + 4:
+            fmt = '<' + 'i'*chip_num*7 + 'H'*3
+        else:
+            fmt = '<' + 'i'*chip_num*7 + 'H'*2
         parse_data = struct.unpack(fmt, payload)
 
         return parse_data
